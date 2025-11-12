@@ -51,8 +51,8 @@ stages:
   jobs:
   - deployment: Deploy
     displayName: Deploy
-    pool:
-      vmImage: $(vmImageName)
+    pool: monica-personal-computer
+      
     environment: 'Monina20205azuredevopsgithubacraksapp-1547.default'
     strategy:
       runOnce:
