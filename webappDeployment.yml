@@ -1,0 +1,52 @@
+# ----------------------------------------------------------------
+# 1. Deployment: Defines the desired state of the application Pods
+# ----------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-web-app
+  labels:
+    app: my-web-app
+spec:
+  # Run 3 instances (replicas) of the web application
+  replicas: 3
+  selector:
+    # Selector must match the pod labels below
+    matchLabels:
+      app: my-web-app
+  template:
+    metadata:
+      labels:
+        app: my-web-app
+    spec:
+      containers:
+      - name: web-container
+        # Replace 'nginx:latest' with your actual Docker image (e.g., 'my-registry/my-app:v1.0')
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        # Recommended: Define resource limits to prevent 'noisy neighbor' issues
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+---
+# ----------------------------------------------------------------
+# 2. Service: Exposes the application pods to external traffic
+# ----------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-web-app-service
+spec:
+  # The selector links this Service to the Pods created by the Deployment above
+  selector:
+    app: my-web-app
+  # For web apps, the LoadBalancer type is the most common way to get an external IP
+  type: LoadBalancer
+  ports:
+  - protocol: TCP
+    # The external port the service exposes (e.g., 80 for HTTP)
+    port: 80
+    # The port the container is listening on (must match the containerPort above)
+    targetPort: 80
