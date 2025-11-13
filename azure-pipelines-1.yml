@@ -1,0 +1,88 @@
+triger:
+  master:
+
+resources:
+  - repo: self
+
+#service connections:
+#  - dockerRegistryServiceConnection: 'my-docker-registry-connection'
+variables:
+  -dockerRegistryServiceConnection: 'my-docker-registry-connection'
+  - imageRepository: 'my-app-image'
+  - containerRegistry: 'mycontainerregistry.azurecr.io'
+  - dockerfilePath: 'Dockerfile'
+  - tag: '$(Build.BuildId)' 
+
+    vmImage: 'monica-personal-computer'
+
+#build  docker image and push to acr
+stages:
+  - stage: Build
+    displayName: 'Build'
+    jobs:
+      - job: BuildJob
+        displayName: 'Build Docker Image'
+        pool: 'monica-personal-computer''
+        steps:
+          - task: Docker@2
+            displayName: 'Build Docker Image'
+            inputs:
+              command: 'buildAndPush'
+              repository: '$(imageRepository)'
+              dockerfile: '$(dockerfilePath)'
+              tags: |
+                $(tag)    
+              containerRegistry: '$(dockerRegistryServiceConnection)'
+
+          
+              #copy files to build artifact staging directory and publish build artifacts
+            bash:  echo contains in system default working directory ls -lart $(system.defaultworkingdirectory)
+            bash: echo Before copying Contents in Build Artifact Directory; ls -R $(Build.ArtifactStagingDirectory) 
+
+            task: CopyFiles@2
+             displayName: 'Copy Files to Artifact Staging Directory'
+            inputs:
+                 SourceFolder: '$(System.DefaultWorkingDirectory)'
+                 Contents: '**'
+                 TargetFolder: '$(Build.ArtifactStagingDirectory)'    
+                 overwrite: true
+            
+            bash: echo After copying Contents in Build Artifact Directory; ls -R $(Build.ArtifactStagingDirectory)
+            
+            task: PublishBuildArtifacts@1
+             displayName: 'Publish Build Artifacts'
+            inputs: 
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+              ArtifactName: 'drop'
+              publishLocation: 'Container'  
+   
+
+    stage: deploy
+    displayName: 'deploy stage' 
+    dependsOn: Build
+
+    jobs:
+      - job: deployjob
+        displayName: 'deploy job' 
+        pool: 'monica-personal-computer'
+        environment: 'stacksimplifyazuredevopsgithubacraksapp1.default' 
+        strategy:
+          runOnce:    
+            deploy: 
+             steps:
+                - task: KubernetesManifest@0  
+                  displayName: 'deploy to kubernets cluster'  
+                  inputs:
+                    action: 'create secrets'   
+                    secretname: $(imagePullsecret)
+                    dockerReustryendpoint: '$(dockerRegistryServiceConnection)'
+
+                - task: KubernetesManifest@0  
+                  displayName: 'deploy to kubernets cluster'  
+                  inputs:
+                    action: 'deployments'   
+                    manifests: 
+                     $(pipeline.workspace)/drop/k8s/deployment.yaml
+                     $(pipeline.workspace)/drop/k8s/service.yaml
+                    containers: '$(containerRegistry)/$(imageRepository):$(tag)'
+                    imagePullSecrets: '$(imagePullsecret)'  
