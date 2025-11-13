@@ -1,6 +1,9 @@
 {
     "recommendations": [
         "pascalreitermann93.vscode-yaml-sort",
-        "matthiesen-technology.yaml-with-script"
+        "matthiesen-technology.yaml-with-script",
+        "vscode-md-yaml-lint.md-yaml-lint",
+        "darioajr.yaml-doctor",
+        "timonwong.shellcheck"
     ]
 }

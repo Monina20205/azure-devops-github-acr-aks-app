@@ -1,0 +1,107 @@
+## Corrected YAML Azure Pipeline File
+
+trigger:
+  # The trigger should be a list item under the trigger key
+  - master
+
+resources:
+  # This section is correctly indented
+  - repo: self
+
+# service connections: (Commented out)
+
+variables:
+  # Variables should be a list of map items
+  - name: dockerRegistryServiceConnection
+    value: 'my-docker-registry-connection'
+  - name: imageRepository
+    value: 'my-app-image'
+  - name: containerRegistry
+    value: 'mycontainerregistry.azurecr.io'
+  - name: dockerfilePath
+    value: 'Dockerfile'
+  - name: tag
+    value: '$(Build.BuildId)'
+  # The vmImage needs to be defined either as a separate variable or within the pool definition
+  # Assuming it is intended for the pool for consistency. The definition here is moved below.
+
+# build docker image and push to acr
+stages:
+  - stage: Build
+    displayName: 'Build Stage'
+    jobs:
+      - job: BuildJob
+        displayName: 'Build Docker Image'
+        # The pool should be defined correctly with a 'vmImage' or 'name' property
+        pool:
+          name: 'monica-personal-computer'
+          # If it's a Microsoft-hosted agent, it would be 'vmImage: ubuntu-latest' etc.
+          # If it's a self-hosted agent pool name, just use 'pool: monica-personal-computer'
+        
+        steps:
+          - task: Docker@2
+            displayName: 'Build and Push Docker Image'
+            inputs:
+              command: 'buildAndPush'
+              repository: '$(imageRepository)'
+              dockerfile: '$(dockerfilePath)'
+              tags: |
+                $(tag)
+              containerRegistry: '$(dockerRegistryServiceConnection)'
+
+          # The subsequent bash and task definitions must be properly indented as separate list items under 'steps'
+          - bash: echo 'Contents in system default working directory' && ls -lart $(System.DefaultWorkingDirectory)
+            displayName: 'List Working Directory Contents'
+          
+          - bash: echo 'Before copying Contents in Build Artifact Directory' && ls -R $(Build.ArtifactStagingDirectory)
+            displayName: 'List Artifact Directory Before Copy'
+
+          - task: CopyFiles@2
+            displayName: 'Copy Files to Artifact Staging Directory'
+            inputs:
+              SourceFolder: '$(System.DefaultWorkingDirectory)'
+              Contents: '**'
+              TargetFolder: '$(Build.ArtifactStagingDirectory)'
+              overwrite: true
+
+          - bash: echo 'After copying Contents in Build Artifact Directory' && ls -R $(Build.ArtifactStagingDirectory)
+            displayName: 'List Artifact Directory After Copy'
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Build Artifacts'
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+              ArtifactName: 'drop'
+              publishLocation: 'Container'
+
+  # The Deploy Stage must be a separate list item under 'stages'
+  - stage: Deploy
+    displayName: 'Deploy Stage'
+    dependsOn: Build
+    jobs:
+      - deployment: deployjob # Use 'deployment' keyword for deployment jobs
+        displayName: 'Deploy Job'
+        pool:
+          name: 'monica-personal-computer'
+        environment: 'stacksimplifyazuredevopsgithubacraksapp1.default'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: KubernetesManifest@0
+                  displayName: 'Create Image Pull Secret'
+                  inputs:
+                    action: 'createSecret' # Correct action for creating a secret
+                    secretName: 'imagepullsecret' # Use a static name or correct variable here
+                    dockerRegistryEndpoint: '$(dockerRegistryServiceConnection)'
+                    
+                - task: KubernetesManifest@0
+                  displayName: 'Deploy to Kubernetes Cluster'
+                  inputs:
+                    action: 'deploy' # Correct action for deployment
+                    manifests: |
+                      $(Pipeline.Workspace)/drop/k8s/deployment.yaml
+                      $(Pipeline.Workspace)/drop/k8s/service.yaml
+                    containers: |
+                      $(containerRegistry)/$(imageRepository):$(tag)
+                    imagePullSecrets: 'imagepullsecret' # Use the static secret name defined above
